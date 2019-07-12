@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from DSBMobile import DSBMobile
 
@@ -17,8 +18,11 @@ if not os.path.isdir(dataFolder):
     print("Data folder does not exist! Creating one...")
     os.mkdir(dataFolder)
 
+# Generate file name
+timeTableDate = time.strptime(timeTable.date, "%d.%m.%Y %H:%M")
+timeTableFile = dataFolder + time.strftime("%Y-%m-%d_%H-%M", timeTableDate) + ".htm"
+
 # Check if we are up-to-date
-timeTableFile = dataFolder + timeTable.date.replace(" ", "_").replace(":", "-") + ".htm"
 if not os.path.isfile(timeTableFile):
     print("We are NOT up-to-date!")
     print("Downloading timetable...")
