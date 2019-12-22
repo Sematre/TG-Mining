@@ -1,40 +1,62 @@
-import requests
+import base64
+import uuid
+from io import StringIO
+import gzip
 import json
+import requests
+import time
+from datetime import datetime
 
 class TimeTable:
-    def __init__(self, isHtml, date, groupName, title, url):
-        self.isHtml = isHtml
+    def __init__(self, date, url):
         self.date = date
-        self.groupName = groupName
-        self.title = title
         self.url = url
 
-class News:
-    def __init__(self, headLine, date, id, imageUrl, shortMessage, wholeMessage):
-        self.headLine = headLine
-        self.date = date
-        self.id = id
-        self.imageUrl = imageUrl
-        self.shortMessage = shortMessage
-        self.wholeMessage = wholeMessage
-
 class DSBMobile:
+    args = {}
+
     def __init__(self, username, password):
-        response = "[" + requests.get("https://iphone.dsbcontrol.de/iPhoneService.svc/DSB/authid/" + username + "/" + password).text + "]"
-        self.key = json.loads(response)[0]
-        if self.key == "00000000-0000-0000-0000-000000000000":
-            raise ValueError("Wrong username or password")
-    
+        self.args["UserId"] = username
+        self.args["UserPw"] = password
+        self.args["Language"] = "de"
+
+        self.args["Device"] = "Nexus 4"
+        self.args["AppId"] = str(uuid.uuid4())
+        self.args["AppVersion"] = "2.5.9"
+        self.args["OsVersion"] = "27 8.1.0"
+
+        self.args["PushId"] = ""
+        self.args["BundleId"] = "de.heinekingmedia.dsbmobile"
+
     def getTimeTables(self):
+        data = self.pullData()
+        if data["Resultcode"] is not 0:
+            raise Exception(data["ResultStatusInfo"])
+
         objects = []
-        for jsonObject in json.loads(requests.get("https://iphone.dsbcontrol.de/iPhoneService.svc/DSB/timetables/" + self.key).text):
-            objects.append(TimeTable(jsonObject["ishtml"], jsonObject["timetabledate"], jsonObject["timetablegroupname"], jsonObject["timetabletitle"], jsonObject["timetableurl"]))
-        
+        for jsonObject in self.findJsonObjectByTitle(self.findJsonObjectByTitle(data["ResultMenuItems"], "Inhalte")["Childs"], "Pläne")["Root"]["Childs"]:
+            objects.append(TimeTable(jsonObject["Date"], jsonObject["Childs"][0]["Detail"]))
+
         return objects
-    
-    def getNews(self):
-        objects = []
-        for jsonObject in json.loads(requests.get("https://iphone.dsbcontrol.de/iPhoneService.svc/DSB/news/" + self.key).text):
-            objects.append(News(jsonObject["headline"], jsonObject["newsdate"], jsonObject["newsid"], jsonObject["newsimageurl"], jsonObject["shortmessage"], jsonObject["wholemessage"]))
-        
-        return objects
+
+    def pullData(self):
+        headers = {}
+        headers["User-Agent"] = "Dalvik/2.1.0 (Linux; U; Android 8.1.0; Nexus 4 Build/OPM7.181205.001)"
+        headers["Accept-Encoding"] = "gzip, deflate"
+        headers["Content-Type"] = "application/json;charset=utf-8"
+        response = requests.post("https://www.dsbmobile.de/JsonHandler.ashx/GetData", headers=headers, data=self.packageArgs()).json()
+        return json.loads(gzip.decompress(base64.b64decode(response["d"])).decode("UTF-8"))
+
+    def findJsonObjectByTitle(self, sourceArray, title):
+        for element in sourceArray:
+            if "Title" in element:
+                if element["Title"].lower() == title.lower():
+                    return element
+
+    def packageArgs(self):
+        date = datetime.fromtimestamp(int(time.time())).strftime("%a %b %d %Y %H:%M:%S")
+        self.args["Date"] = date
+        self.args["LastDate"] = date
+
+        innerArgs = {"Data": base64.b64encode(gzip.compress(bytes(json.dumps(self.args), "UTF-8"))).decode('ascii'), "DataType": 1}
+        return json.dumps(dict({"req": innerArgs}))
