@@ -9,7 +9,7 @@ password = "<pass>"
 dataFolder   = "data/"
 
 # Pull timetable from server
-print("Pull timetable from server...")
+print("Pulling timetable from server...")
 dsb = DSBMobile(username, password)
 timeTable = dsb.getTimeTables()[0]
 
